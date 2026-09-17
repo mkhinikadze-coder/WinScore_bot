@@ -17,14 +17,28 @@ API_BASE = "https://v3.football.api-sports.io"
 def af_get(endpoint, params):
     headers = {"x-apisports-key": API_KEY}
     r = requests.get(f"{API_BASE}/{endpoint}", headers=headers, params=params, timeout=15)
+    if not r.ok:
+        # log the response body so the real reason (bad key, plan limit, etc.) shows up in Render logs
+        log.error("API-Football %s response: %s", r.status_code, r.text[:500])
     r.raise_for_status()
-    return r.json()
+    data = r.json()
+    # log_ result count + any API-side error/warning even on a 200 OK, so empty
+    # results (wrong team id, plan restriction, etc.) are visible in Render logs
+    log.info(
+        "API-Football %s params=%s -> results=%s errors=%s",
+        endpoint, params, data.get("results"), data.get("errors"),
+    )
+    return data
 
 
 def search_team(name):
     data = af_get("teams", {"search": name})
     resp = data.get("response", [])
-    return resp[0]["team"] if resp else None
+    if not resp:
+        return None
+    team = resp[0]["team"]
+    log.info("search_team(%r) matched id=%s name=%s", name, team["id"], team["name"])
+    return team
 
 
 def last_fixtures(team_id, n=10):
